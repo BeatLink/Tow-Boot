@@ -1,0 +1,89 @@
+From a20ec070059807ba51abea3c39b1643e3a4cd628 Mon Sep 17 00:00:00 2001
+From: BeatLink <git@beatlink.simplelogin.com>
+Date: Tue, 18 Aug 2026 19:01:39 -0500
+Subject: [PATCH 00/12] sunxi: bring up the PinePhone's MIPI-DSI panel
+
+This series brings up the MIPI-DSI panel of the PinePhone in U-Boot and
+makes the boot menu usable on the phone itself: the menu is drawn on the
+panel, sized for it, and driven with the phone's three buttons. The
+practical target is a UEFI boot loader menu (systemd-boot) readable and
+usable without a serial adapter.
+
+Patches 1-8 bring up the display. The sun6i MIPI-DSI host and its D-PHY
+are ported from Linux (sun6i_mipi_dsi.c and phy-sun6i-mipi-dphy.c),
+TCON0 learns the 8080/CPU mode the DSI host feeds from, and a driver is
+added for the Xingbangda XBD599, the ST7703-class panel of the PinePhone
+1.2. The pipeline is torn down again before the OS takes over, since the
+kernel's driver fails to attach the panel when it finds the DSI block
+streaming. Supporting fixes power the PMIC's GPIO LDOs that feed the
+panel, honour num-interpolated-steps in pwm_backlight, and add the
+A64's s_pwm pinmux function for the backlight PWM. A new
+SUNXI_VIDCONSOLE_FIRST option lets a board put the panel at the head of
+stdout, because EFI takes its console geometry from the first entry and
+a menu drawn for 80x25 overflows a 45-column phone panel.
+
+Patches 9-12 make the buttons a keyboard. A driver for the Allwinner
+LRADC reads the volume keys (based on a Tow-Boot patch by Samuel
+Dionne-Riel, itself based on work by Ondrej Jirman), and a new driver
+reads the power key an AXP803 PMIC latches in its interrupt status.
+The PinePhone maps them to up, down and enter through u-boot,code
+properties in a U-Boot-only overlay, so the keys keep their meaning
+under Linux.
+
+The two halves are independent: the display stack (1-8) and the button
+stack (9-12) each stand alone.
+
+Tested on a PinePhone 1.2: U-Boot's console and the systemd-boot menu
+render on the panel, the buttons drive the menu, and Linux 6.x attaches
+the panel and brings the display up normally after handoff.
+
+BeatLink (11):
+  pinctrl: sunxi: add the A64's s_pwm function
+  power: regulator: axp: support the GPIO pins used as LDOs
+  video: pwm_backlight: honour num-interpolated-steps
+  video: sunxi: add a sun6i MIPI-DSI host driver
+  video: sunxi: drive TCON0 in DSI mode on the A64
+  video: panel: add the Xingbangda XBD599
+  sunxi: let a board put the panel at the head of stdout
+  sunxi: pinephone: enable the display
+  button: add a driver for the power key of an AXP PMIC
+  sunxi: let button keyboards join stdin
+  sunxi: pinephone: let the buttons drive the boot menu
+
+Samuel Dionne-Riel (1):
+  button: add a driver for the Allwinner LRADC
+
+ .../dts/sun50i-a64-pinephone-1.2-u-boot.dtsi  |   29 +
+ arch/arm/include/asm/arch-sunxi/clock_sun6i.h |   10 +
+ arch/arm/mach-sunxi/Kconfig                   |   19 +
+ configs/pinephone_defconfig                   |   20 +
+ .../input/x-powers,axp803-pek.txt             |   30 +
+ drivers/button/Kconfig                        |   14 +
+ drivers/button/Makefile                       |    4 +-
+ drivers/button/button-axp-pek.c               |  101 ++
+ drivers/button/button-sun4i-lradc.c           |  206 +++
+ drivers/pinctrl/sunxi/pinctrl-sunxi.c         |    1 +
+ drivers/power/regulator/axp_regulator.c       |   22 +-
+ drivers/video/Kconfig                         |    8 +
+ drivers/video/Makefile                        |    2 +
+ drivers/video/panel-xingbangda-xbd599.c       |  319 ++++
+ drivers/video/pwm_backlight.c                 |   55 +-
+ drivers/video/sunxi/Makefile                  |    1 +
+ drivers/video/sunxi/sunxi_lcd.c               |  299 +++-
+ drivers/video/sunxi/sunxi_mipi_dsi.c          | 1281 +++++++++++++++++
+ drivers/video/sunxi/sunxi_mipi_dsi.h          |  163 +++
+ drivers/video/sunxi/sunxi_tcon.h              |   41 +
+ include/configs/sunxi-common.h                |   18 +-
+ 21 files changed, 2627 insertions(+), 16 deletions(-)
+ create mode 100644 arch/arm/dts/sun50i-a64-pinephone-1.2-u-boot.dtsi
+ create mode 100644 doc/device-tree-bindings/input/x-powers,axp803-pek.txt
+ create mode 100644 drivers/button/button-axp-pek.c
+ create mode 100644 drivers/button/button-sun4i-lradc.c
+ create mode 100644 drivers/video/panel-xingbangda-xbd599.c
+ create mode 100644 drivers/video/sunxi/sunxi_mipi_dsi.c
+ create mode 100644 drivers/video/sunxi/sunxi_mipi_dsi.h
+ create mode 100644 drivers/video/sunxi/sunxi_tcon.h
+
+-- 
+2.55.0
+

@@ -5,7 +5,7 @@ The series lives on branch `tb-2026.04-dev` in
 from `pinctrl: sunxi: add the A64's s_pwm function` through
 `sunxi: pinephone: enter USB mass storage when volume up is held`:
 
-    git log --oneline 961b7ecc11..a2b91909cc
+    git log --oneline 55888088af..adbc683264
 
 The commits above that range are Tow-Boot's own fixes and are not part of
 the submission. Neither is the last commit *in* it — the volume-up UMS

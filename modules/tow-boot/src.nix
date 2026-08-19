@@ -11,7 +11,6 @@ let
   inherit (config.Tow-Boot)
     releaseRC
     releaseNumber
-    tag
     uBootVersion
     variant
   ;
@@ -54,7 +53,7 @@ in
   };
   config = {
     Tow-Boot = {
-      uBootVersion = mkDefault "2023.07";
+      uBootVersion = mkDefault "2026.04";
       tag =
         let
           releaseNumber = "007"; # No tag yet in the split tree
@@ -78,6 +77,9 @@ in
           "2023.10" = "sha256-4A5sbwFOBGEBc50I0G8yiBHOvPWuEBNI9AnLvVXOaQA=";
           "2024.01" = "sha256-uZYR8e0je/NUG9yENLaMlqbgWWcGH5kkQ8swqr6+9bM=";
           "2024.04" = "sha256-GKhT/jn6160DqQzC1Cda6u1tppc13vrDSSuAUIhD3Uo=";
+          "2024.07" = "sha256-9ZHamrkO89az0XN2bQ3f+QxO1zMGgIl0hhF985DYPI8=";
+          "2024.10" = "sha256-so2vSsF+QxVjYweL9RApdYQTf231D87ZsS3zT2GpL7A=";
+          "2026.04" = "ac7c04b8b7004923b00a4e5d6699c5df4d21233bac9fda690d8cfbc209fff2fd";
         };
         Tow-Boot = {
           "tb-2023.07-007" = "sha256-qEVvvnKy3fdFmU7Qn1U2PMqhf8p228v6+4XtkVGgQgk=";
@@ -95,16 +97,12 @@ in
           ;
         })
       else
-        let knownHashes = config.Tow-Boot.knownHashes.Tow-Boot; in
+        # The tb-2026.04 port of the Tow-Boot tree; bump rev and hash when the branch moves.
         mkDefault (pkgs.fetchFromGitHub {
           repo = "U-Boot";
-          owner = "Tow-Boot";
-          rev = "${tag}";
-          sha256 =
-            if knownHashes ? ${tag}
-            then knownHashes.${tag}
-            else builtins.throw "No known hashes for Tow-Boot-flavoured U-Boot matching tag ${tag}"
-          ;
+          owner = "BeatLink";
+          rev = "1b6787ec4ba8509ea50709adf2371d13510fa8d7"; # tb-2026.04-dev
+          sha256 = "0kcdacn49b4yan9brr3i8pl6aafpr1rj12vb9q7xqvqczn2h1gq5";
         })
       ;
     };

@@ -24,12 +24,34 @@ let
   secondOffset = 16384; # in sectors
   sectorSize = 512;
 
-  anyRockchip = lib.any (v: v) [cfg.rockchip-rk3399.enable];
+  rockchipSOCs = [
+    "rockchip-rk3328"
+    "rockchip-rk3399"
+  ];
+
+  anyRockchip = lib.any (soc: cfg.${soc}.enable) rockchipSOCs;
   isPhoneUX = config.Tow-Boot.phone-ux.enable;
+
+  # The RK3399 works around SPI flashes with 2K or 4K pages; the RK3328 uses
+  # the same layout on SPI as on an SD card.
+  useSpi2K4Kworkaround = cfg.rockchip-rk3399.enable;
+  useSpiSDLayout = cfg.rockchip-rk3328.enable;
+
+  chipName =
+         if cfg.rockchip-rk3328.enable then "rk3328"
+    else if cfg.rockchip-rk3399.enable then "rk3399"
+    else throw "chipName needs to be defined for SoC."
+  ;
 in
 {
   options = {
     hardware.socs = {
+      rockchip-rk3328.enable = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable when SoC is Rockchip RK3328";
+        internal = true;
+      };
       rockchip-rk3399.enable = mkOption {
         type = types.bool;
         default = false;
@@ -41,11 +63,9 @@ in
 
   config = mkMerge [
     {
-      hardware.socList = [
-        "rockchip-rk3399"
-      ];
+      hardware.socList = rockchipSOCs;
     }
-    (mkIf cfg.rockchip-rk3399.enable {
+    (mkIf anyRockchip {
       system.system = "aarch64-linux";
       Tow-Boot = {
         config = mkIf withSPI [
@@ -72,13 +92,12 @@ in
           })
         ];
         firmwarePartition = {
-            offset = partitionOffset * 512; # 32KiB into the image, or 64 × 512 long sectors
+            offset = partitionOffset * sectorSize; # 32KiB into the image, or 64 × 512 long sectors
             length = firmwareMaxSize + (secondOffset * sectorSize); # in bytes
           }
         ;
         builder = {
           additionalArguments = {
-            BL31 = "${pkgs.Tow-Boot.armTrustedFirmwareRK3399}/bl31.elf";
             inherit
               firmwareMaxSize
               partitionOffset
@@ -87,12 +106,21 @@ in
             ;
           };
           installPhase = mkMerge [
-            (mkIf (variant == "spi") ''
-              echo ":: Preparing image for SPI flash..."
+            (mkIf (variant == "spi" && useSpi2K4Kworkaround) ''
+              echo ":: Preparing image for SPI flash (2K/4K workaround)..."
               (PS4=" $ "; set -x
-              tools/mkimage -n rk3399 -T rkspi -d tpl/u-boot-tpl-dtb.bin:spl/u-boot-spl-dtb.bin spl.bin
+              tools/mkimage -n ${chipName} -T rkspi -d tpl/u-boot-tpl-dtb.bin:spl/u-boot-spl-dtb.bin spl.bin
               # 512K here is 0x80000 CONFIG_SYS_SPI_U_BOOT_OFFS
               cat <(dd if=spl.bin bs=512K conv=sync) u-boot.itb > $out/binaries/Tow-Boot.$variant.bin
+              )
+            '')
+            (mkIf (variant == "spi" && useSpiSDLayout) ''
+              echo ":: Preparing image for SPI flash (SD layout)..."
+              (PS4=" $ "; set -x
+              dd if=idbloader.img of=Tow-Boot.$variant.bin conv=fsync,notrunc bs=$sectorSize seek=0
+              # 0x80000 here is CONFIG_SYS_SPI_U_BOOT_OFFS
+              dd if=u-boot.itb    of=Tow-Boot.$variant.bin conv=fsync,notrunc bs=$sectorSize seek=$((0x80000 / sectorSize))
+              cp -v Tow-Boot.$variant.bin $out/binaries/
               )
             '')
             (mkIf (variant != "spi") ''
@@ -110,11 +138,38 @@ in
 
     (mkIf (anyRockchip) {
       Tow-Boot = {
-        config = [
-          (helpers: with helpers; {
+        config = mkMerge [
+          [(helpers: with helpers; {
             CMD_POWEROFF = yes;
             SYSRESET_CMD_POWEROFF = yes;
-          })
+
+            # HDMI output during boot
+            VIDEO = yes;
+            DISPLAY = yes;
+            VIDEO_ROCKCHIP = yes;
+            DISPLAY_ROCKCHIP_HDMI = yes;
+            PHY_ROCKCHIP_INNO_HDMI = yes;
+            VIDEO_DW_HDMI = yes;
+            DM_I2C = yes;
+            VIDEO_BPP32 = yes;
+
+            USB_KEYBOARD = yes;
+
+            # Drive the UI from both the serial console and HDMI with a USB keyboard.
+            SYS_CONSOLE_IS_IN_ENV = yes;
+            CONSOLE_MUX = yes;
+            USE_PREBOOT = yes;
+            PREBOOT = freeform ''"setenv stdout serial,vidconsole; setenv stderr serial,vidconsole"'';
+          })]
+          # Stock builds scan with bootstd; Tow-Boot tree builds keep the Tow-Boot boot flow.
+          (mkIf config.Tow-Boot.buildUBoot [(helpers: with helpers; {
+            BOOTSTD = lib.mkForce yes;
+            BOOTSTD_FULL = yes;
+            BOOTSTD_DEFAULTS = lib.mkForce yes;
+            DISTRO_DEFAULTS = lib.mkForce no;
+            BOOTCOMMAND = lib.mkForce (freeform ''"bootflow scan -b"'');
+            USE_BOOTCOMMAND = yes;
+          })])
         ];
         builder.postPatch =
           # The baud rate needs to be patched out to match the `CONFIG_BAUDRATE` value,
@@ -132,6 +187,19 @@ in
           ''
         ;
       };
+    })
+
+    (mkIf cfg.rockchip-rk3328.enable {
+      Tow-Boot.builder.additionalArguments.BL31 = "${pkgs.Tow-Boot.armTrustedFirmwareRK3328}/bl31.elf";
+      # The ROCK64's stock timings are unstable on the boards seen here.
+      Tow-Boot.builder.postPatch = ''
+        substituteInPlace arch/arm/dts/rk3328-rock64-u-boot.dtsi \
+        --replace rk3328-sdram-lpddr3-1600.dtsi rk3328-sdram-lpddr3-666.dtsi
+      '';
+    })
+
+    (mkIf cfg.rockchip-rk3399.enable {
+      Tow-Boot.builder.additionalArguments.BL31 = "${pkgs.Tow-Boot.armTrustedFirmwareRK3399}/bl31.elf";
     })
 
     # Documentation fragments

@@ -101,7 +101,7 @@ in
         mkDefault (pkgs.fetchFromGitHub {
           repo = "U-Boot";
           owner = "BeatLink";
-          rev = "7c9f770ee9269e3f71a39a75b7ea87c603ccd9f1"; # tb-2026.04-dev
+          rev = "dc01be1b8569401359b17f04f32d7baad68f0675"; # tb-2026.04-dev
           sha256 = "0kcdacn49b4yan9brr3i8pl6aafpr1rj12vb9q7xqvqczn2h1gq5";
         })
       ;

@@ -38,6 +38,12 @@ in
       [(helpers: with helpers; {
         USB_MUSB_GADGET = yes;
         USB_GADGET_MANUFACTURER = freeform ''"Pine64"'';
+
+        # The panel is 45 columns wide in portrait, narrower than the 80 the
+        # serial console reports. Sizing the menu to the smaller of the two
+        # per-axis lays it out for a screen neither console has, so take the
+        # panel's size: it is the one being looked at.
+        PDCURSES_PREFER_VIDCONSOLE = yes;
       })]
       # Requires Tow-Boot patches
       (mkIf (!buildUBoot) [(helpers: with helpers;{

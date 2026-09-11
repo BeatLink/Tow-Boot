@@ -155,11 +155,11 @@ in
 
             USB_KEYBOARD = yes;
 
-            # Drive the UI from both the serial console and HDMI with a USB keyboard.
+            # Drive the UI from both the serial console and HDMI with a USB keyboard; the keyboard only registers as stdin once USB is scanned.
             SYS_CONSOLE_IS_IN_ENV = yes;
             CONSOLE_MUX = yes;
             USE_PREBOOT = yes;
-            PREBOOT = freeform ''"setenv stdout serial,vidconsole; setenv stderr serial,vidconsole"'';
+            PREBOOT = freeform ''"usb start; setenv stdout serial,vidconsole; setenv stderr serial,vidconsole"'';
           })]
           # Stock builds scan with bootstd; Tow-Boot tree builds keep the Tow-Boot boot flow.
           (mkIf config.Tow-Boot.buildUBoot [(helpers: with helpers; {
